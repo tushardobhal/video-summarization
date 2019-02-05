@@ -1,0 +1,7 @@
+.ipynb_checkpoints
+log*
+YouTubeClips.tar
+youtube_clips
+data
+pre_trained_weights
+*.npz
