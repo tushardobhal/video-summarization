@@ -2,6 +2,7 @@
 log*
 YouTubeClips.tar
 youtube_clips
+coco_data
 data
 pre_trained_weights
 *.npz
