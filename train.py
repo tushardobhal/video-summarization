@@ -152,6 +152,10 @@ def main():
 # load 2 video pieces with same lengths
 # load text descriptions
 def load_data():
+    ''' 
+    X (video features) is built dynamically.
+    This function requires features_video.npz, raw_text.pkl, Y.pkl
+    '''
     print("loading data ...")
     fs = np.load("features_video.npz")
     print(len(fs.files))
