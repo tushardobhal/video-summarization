@@ -11,6 +11,7 @@ import os
 from os.path import join
 from glob import glob
 
+from sklearn.decomposition import PCA
 import skimage.io as io
 from skimage.transform import resize
 from matplotlib.pyplot import figure
@@ -25,7 +26,11 @@ import cv2
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 c3d_pre_trained = 'pre_trained_weights/c3d_ucf101.pth'
 data_dir = "data"
+video_features_file = "features_video.npz"
 max_frames_per_clip = 500
+print(device)
+
+use_pca = True
 
 
 # In[ ]:
@@ -34,7 +39,13 @@ max_frames_per_clip = 500
 # http://www.cs.utexas.edu/users/ml/clamp/videoDescription/
 
 class DataLoader:
-
+    
+    def __init__(self):
+        super(DataLoader, self).__init__()
+        self.pca = None
+        self.n_components = 512
+        self.pca = PCA(n_components=self.n_components)
+        
     def create_data_dirs(self):
         clips = sorted(glob(join("youtube_clips", "*.avi")))
         
@@ -106,9 +117,36 @@ class DataLoader:
         clip = np.float32(clip)
         
         return torch.from_numpy(clip).to(device)
+    
+    def extract_video_features(self):
+        clips = sorted(glob(join(data_dir, '*')))
+        feature_dict = {}
+        
+        i = 1
+        for clip in clips:
+            clip_name = clip.split('/')[-1]
+            print("{}/{} - {}".format(i, len(clips), clip_name)) 
+            
+            x = self.get_video_clip(clip_name, False)
+            features = c3d(x).data.cpu().numpy()
+                
+            del x
+            torch.cuda.empty_cache()
+            
+            if clip_name in feature_dict:
+                feature_dict[clip_name].append(features)
+            else:
+                feature_dict[clip_name] = [features]
+            
+            i += 1
+        
+        self.write_features(feature_dict)
+    
+    def pca_transform(self, features):
+        return self.pca.fit_transform(features)
         
     def write_features(self, features):
-        np.savez("features.npz", **features)
+        np.savez(video_features_file, **features)
 
 
 # In[ ]:
@@ -117,7 +155,7 @@ class DataLoader:
 # https://github.com/DavideA/c3d-pytorch
 
 class C3D(nn.Module):
-    def __init__(self):
+    def __init__(self, pre_trained=True):
         super(C3D, self).__init__()
 
         self.conv1 = nn.Conv3d(3, 64, kernel_size=(3, 3, 3), padding=(1, 1, 1))
@@ -147,33 +185,32 @@ class C3D(nn.Module):
         self.relu = nn.ReLU()
         self.softmax = nn.Softmax()
         
-        self.__load_pretrained_weights()
+        if pre_trained:
+            self.__load_pretrained_weights()
 
     def forward(self, x):
-
-        h = self.relu(self.conv1(x))
-        h = self.pool1(h)
-
-        h = self.relu(self.conv2(h))
-        h = self.pool2(h)
-
-        h = self.relu(self.conv3a(h))
-        h = self.relu(self.conv3b(h))
-        h = self.pool3(h)
-
-        h = self.relu(self.conv4a(h))
-        h = self.relu(self.conv4b(h))
-        h = self.pool4(h)
-
-        h = self.relu(self.conv5a(h))
-        h = self.relu(self.conv5b(h))
-        h = self.pool5(h)
-
-        h = h.view(-1, 8192)
-        h = self.relu(self.fc6(h))
-        h = self.dropout(h)
-        h = self.relu(self.fc7(h))
-        h = self.dropout(h)
+        
+        with torch.no_grad():
+            h = self.relu(self.conv1(x))
+            h = self.pool1(h)
+    
+            h = self.relu(self.conv2(h))
+            h = self.pool2(h)
+    
+            h = self.relu(self.conv3a(h))
+            h = self.relu(self.conv3b(h))
+            h = self.pool3(h)
+    
+            h = self.relu(self.conv4a(h))
+            h = self.relu(self.conv4b(h))
+            h = self.pool4(h)
+    
+            h = self.relu(self.conv5a(h))
+            h = self.relu(self.conv5b(h))
+            h = self.pool5(h)
+    
+            h = h.view(-1, 8192)
+            h = self.fc6(h)
 
         return h
     
@@ -234,7 +271,7 @@ class C3D(nn.Module):
 # In[ ]:
 
 
-c3d = C3D()
+c3d = C3D(pre_trained=True)
 c3d.to(device)
 c3d.eval()
 
@@ -244,28 +281,14 @@ data_loader = DataLoader()
 # In[ ]:
 
 
-clips = sorted(glob(join('data', '*')))
-feature_dict = {}
-
-i = 1
-for clip in clips:
-    clip_name = clip.split('/')[-1]
-    print("{}/{} - {}".format(i, len(clips), clip_name))
-        
-    with torch.no_grad():
-        x = data_loader.get_video_clip(clip_name, False)
-        features = c3d(x)
-        del x
-        torch.cuda.empty_cache()
-
-    feature_dict[clip_name] = features.data.cpu().numpy()
-    i += 1
-    
-data_loader.write_features(feature_dict)
+data_loader.extract_video_features()
 
 
 # In[ ]:
 
 
-
+# features = np.load(video_features_file)
+# tot = 0
+# for feature in features:
+#     print(features[feature].shape)
 
