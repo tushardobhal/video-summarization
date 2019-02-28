@@ -111,16 +111,16 @@ class DataLoader:
         descriptions = self.video_descriptions[video_id]
         index = np.random.randint(low=len(descriptions))
         
-        target = torch.zeros(self.max_words_num)
-        target[0] = self.vocab.word2idx["<start>"]
+        target = torch.zeros(self.max_words_num, len(self.vocab))
+        target[0, self.vocab.word2idx["<start>"]] = 1
         k = 1
         for word in descriptions[index].split(' '):    
             filtered_word = word.lower().split('.')[0]
-            target[k] = self.vocab.word2idx[filtered_word]
+            target[k, self.vocab.word2idx[filtered_word]] = 1
             k = k + 1
             if k == self.max_words_num-1:
                 break
-        target[k] = self.vocab.word2idx["<end>"]    
+        target[k, self.vocab.word2idx["<end>"]] = 1    
         return target
     
     def data_generator(self):

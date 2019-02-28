@@ -2,11 +2,9 @@ import argparse
 import time
 import torch
 from Models import get_model
-#from Process import *
 import torch.nn.functional as F
 from Optim import CosineWithRestarts
 from Batch import create_masks
-# import dill as pickle
 import os
 import csv
 import nltk
@@ -14,10 +12,12 @@ from easydict import EasyDict
 import numpy as np
 from tqdm import tqdm
 import pickle as pickle
+import torch.nn as nn
 
 from DataLoader import DataLoader
 from Vocabulary import Vocabulary
 
+#torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
 def train_model(model, opt):
     print("training model...")
@@ -33,17 +33,13 @@ def train_model(model, opt):
 
         total_loss = 0
         for i, (src, trg) in enumerate(trainloader.batch_data_generator()):
-#           src = x.transpose(0,1) # (seq_len, batch, dim)?
-#           trg = y.transpose(0,1)
-#           trg = torch.tensor(opt.trainY[group][start_id: start_id + this_batch]).long().cuda()
-          
           trg_input = trg[:, :-1] # not include the end of sentence
           src_mask, trg_mask = create_masks(src, trg_input, opt)
-            
+          print("SRC ", src_mask.size(), " TARGET ", trg_mask.size())  
           preds = model(src, trg_input, src_mask, trg_mask)
           ys = trg[:, 1:].contiguous().view(-1)
           opt.optimizer.zero_grad()
-          loss = F.cross_entropy(preds.view(-1, preds.size(-1)), ys)#, ignore_index=opt.trg_pad)
+          loss = F.cross_entropy(preds.view(-1, preds.size(-1)), ys.long())#, ignore_index=opt.trg_pad)
           loss.backward()
           opt.optimizer.step()
           if opt.SGDR == True: 
@@ -66,10 +62,6 @@ def train_model(model, opt):
           if opt.checkpoint > 0 and ((time.time()-cptime)//60) // opt.checkpoint >= 1:
               torch.save(model.state_dict(), 'weights/model_weights')
               cptime = time.time()
-   
-   
-        # print("%dm: epoch %d [%s%s]  %d%%  loss = %.3f\nepoch %d complete, loss = %.03f" %\
-        # ((time.time() - start)//60, epoch + 1, "".join('#'*(100//5)), "".join(' '*(20-(100//5))), 100, avg_loss, epoch + 1, avg_loss))
 
 def main():
 
@@ -92,7 +84,7 @@ def main():
     parser.add_argument('-max_strlen', type=int, default=80)
     parser.add_argument('-floyd', action='store_true')
     parser.add_argument('-checkpoint', type=int, default=0)
-    parser.add_argument('-batch_size', type=int, default=64)
+    parser.add_argument('-batch_size', type=int, default=4)
     parser.add_argument('-vid_feat_size', type=int, default=512)
     parser.add_argument('-save_freq', type=int, default=5)
     # DataLoader
@@ -104,7 +96,8 @@ def main():
     
     opt = parser.parse_args()
 
-    opt.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    #opt.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    opt.device = 'cpu'
     
     # read data and create model
     # read_data(opt)
@@ -113,6 +106,13 @@ def main():
     # model = get_model(opt, len(SRC.vocab), len(TRG.vocab))
 #     opt.trainX, opt.trainY, opt.group_keys = load_data()
     model = get_model(opt, opt.vid_feat_size, 8)
+
+    #model = nn.DataParallel(model)
+
+    #cmd = os.popen('nvidia-smi')
+    #gpu = cmd.read()
+    #print(gpu)
+    #cmd.close()
 
     opt.optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr, betas=(0.9, 0.98), eps=1e-9)
     if opt.SGDR == True:
@@ -213,10 +213,10 @@ def promptNextAction(model, opt, SRC, TRG):
                     break
             
             print("saving weights to " + dst + "/...")
-            torch.save(model.state_dict(), f'{dst}/model_weights')
+            torch.save(model.state_dict(), '{dst}/model_weights')
             if saved_once == 0:
-                pickle.dump(SRC, open(f'{dst}/SRC.pkl', 'wb'))
-                pickle.dump(TRG, open(f'{dst}/TRG.pkl', 'wb'))
+                pickle.dump(SRC, open('{dst}/SRC.pkl', 'wb'))
+                pickle.dump(TRG, open('{dst}/TRG.pkl', 'wb'))
                 saved_once = 1
             
             print("weights and field pickles saved to " + dst)

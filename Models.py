@@ -21,7 +21,9 @@ class Encoder(nn.Module):
         self.norm = Norm(d_model)
     def forward(self, src, mask):
         x = src
+        print("ENCODER X:- ", x.size())
         x = self.pe(x)
+        print("ENCODER PE:- ", x.size())
         for i in range(self.N):
             x = self.layers[i](x, mask)
         return self.norm(x)
@@ -35,8 +37,10 @@ class Decoder(nn.Module):
         self.layers = get_clones(DecoderLayer(d_model, heads, dropout), N)
         self.norm = Norm(d_model)
     def forward(self, trg, e_outputs, src_mask, trg_mask):
-        x = self.embed(trg)
+        print("DECODER TARGET :- ", trg.size())
+        x = self.embed(trg.long())
         x = self.pe(x)
+        print("DECODER X(PE) :- " , x.size())
         for i in range(self.N):
             x = self.layers[i](x, e_outputs, src_mask, trg_mask)
         return self.norm(x)
@@ -63,7 +67,7 @@ def get_model(opt, src_vocab, trg_vocab):
        
     if opt.load_weights is not None:
         print("loading pretrained weights...")
-        model.load_state_dict(torch.load(f'{opt.load_weights}/model_weights'))
+        model.load_state_dict(torch.load('{opt.load_weights}/model_weights'))
     else:
         for p in model.parameters():
             if p.dim() > 1:

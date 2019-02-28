@@ -2,4 +2,5 @@
 *.npz
 __pycache__/
 data/
-model
+model.pth
+model/

@@ -1,6 +1,5 @@
 import nltk
 from collections import Counter
-from pycocotools.coco import COCO
 
 class Vocabulary(object):
 

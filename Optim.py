@@ -31,11 +31,11 @@ class CosineWithRestarts(torch.optim.lr_scheduler._LRScheduler):
         self.T_max = T_max
         self.eta_min = eta_min
         self.factor = factor
-        self._last_restart: int = 0
-        self._cycle_counter: int = 0
-        self._cycle_factor: float = 1.
-        self._updated_cycle_len: int = T_max
-        self._initialized: bool = False
+        self._last_restart = 0
+        self._cycle_counter = 0
+        self._cycle_factor = 1.
+        self._updated_cycle_len = T_max
+        self._initialized = False
         super(CosineWithRestarts, self).__init__(optimizer, last_epoch)
 
     def get_lr(self):
