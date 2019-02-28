@@ -15,78 +15,57 @@ import numpy as np
 from tqdm import tqdm
 import pickle as pickle
 
-torch.cuda.set_device(1)
+from DataLoader import DataLoader
+from Vocabulary import Vocabulary
+
 
 def train_model(model, opt):
-    
     print("training model...")
     model.train()
     start = time.time()
     if opt.checkpoint > 0:
         cptime = time.time()
-                 
+    trainloader = DataLoader(opt=opt, train=True)
+    
     for epoch in range(opt.epochs):
         if epoch % opt.save_freq == 0:
           torch.save(model.state_dict(), 'model')
 
         total_loss = 0
-        # if opt.floyd is False:
-        #     print("   %dm: epoch %d [%s]  %d%%  loss = %s" %\
-        #     ((time.time() - start)//60, epoch + 1, "".join(' '*20), 0, '...'), end='\r')
-        
-        # if opt.checkpoint > 0:
-        #     torch.save(model.state_dict(), 'weights/model_weights')
-                    
-        # shuffle groups
-        perm_group = np.random.permutation(opt.group_keys.size)
-        #print(perm_group)
+        for i, (x, y) in enumerate(trainloader.batch_data_generator()):
+          src = x.transpose(0,1) # (seq_len, batch, dim)?
+          trg = y.transpose(0,1)
+#           trg = torch.tensor(opt.trainY[group][start_id: start_id + this_batch]).long().cuda()
+          # print(src.shape)
+          # print(trg.shape)
+          trg_input = trg[:, :-1] # not include the end of sentence
+          src_mask, trg_mask = create_masks(src, trg_input, opt)
+          preds = model(src, trg_input, src_mask, trg_mask)
+          ys = trg[:, 1:].contiguous().view(-1)
+          opt.optimizer.zero_grad()
+          loss = F.cross_entropy(preds.view(-1, preds.size(-1)), ys)#, ignore_index=opt.trg_pad)
+          loss.backward()
+          opt.optimizer.step()
+          if opt.SGDR == True: 
+              opt.sched.step()
 
-        #for i, batch in enumerate(opt.train): 
-        for group in tqdm(opt.group_keys[perm_group]):
-            # shuffle within group
-            group_size = opt.trainX[group].shape[0]
-            perm_in_group = np.random.permutation(group_size)
+          total_loss += loss.item()
 
-            for i in range(group_size // opt.batch_size + 1):
-              if i * opt.batch_size == group_size: # edge case
-                break
-              start_id = i * opt.batch_size
-              this_batch = min(opt.batch_size, group_size - start_id)
+          opt.train_len =  1
+          if (i + 1) % opt.printevery == 0:
+               p = int(100 * (i + 1) / opt.train_len)
+               avg_loss = total_loss/opt.printevery
+               if opt.floyd is False:
+                  print("   %dm: epoch %d [%s%s]  %d%%  loss = %.3f" %\
+                  ((time.time() - start)//60, epoch + 1, "".join('#'*(p//5)), "".join(' '*(20-(p//5))), p, avg_loss), end='\r')
+               else:
+                  print("   %dm: epoch %d [%s%s]  %d%%  loss = %.3f" %\
+                  ((time.time() - start)//60, epoch + 1, "".join('#'*(p//5)), "".join(' '*(20-(p//5))), p, avg_loss))
+               total_loss = 0
 
-              # src = batch.src.transpose(0,1) # (seq_len, batch, dim)?
-              # trg = batch.trg.transpose(0,1)
-              src = torch.tensor(opt.trainX[group][start_id: start_id + this_batch]).cuda()
-              trg = torch.tensor(opt.trainY[group][start_id: start_id + this_batch]).long().cuda()
-              # print(src.shape)
-              # print(trg.shape)
-              trg_input = trg[:, :-1] # not include the end of sentence
-              src_mask, trg_mask = create_masks(src, trg_input, opt)
-              preds = model(src, trg_input, src_mask, trg_mask)
-              ys = trg[:, 1:].contiguous().view(-1)
-              opt.optimizer.zero_grad()
-              loss = F.cross_entropy(preds.view(-1, preds.size(-1)), ys)#, ignore_index=opt.trg_pad)
-              loss.backward()
-              opt.optimizer.step()
-              if opt.SGDR == True: 
-                  opt.sched.step()
-              
-              # total_loss += loss.item()
-                  
-              # opt.train_len =  1
-              # if (i + 1) % opt.printevery == 0:
-              #      p = int(100 * (i + 1) / opt.train_len)
-              #      avg_loss = total_loss/opt.printevery
-              #      if opt.floyd is False:
-              #         print("   %dm: epoch %d [%s%s]  %d%%  loss = %.3f" %\
-              #         ((time.time() - start)//60, epoch + 1, "".join('#'*(p//5)), "".join(' '*(20-(p//5))), p, avg_loss), end='\r')
-              #      else:
-              #         print("   %dm: epoch %d [%s%s]  %d%%  loss = %.3f" %\
-              #         ((time.time() - start)//60, epoch + 1, "".join('#'*(p//5)), "".join(' '*(20-(p//5))), p, avg_loss))
-              #      total_loss = 0
-              
-              # if opt.checkpoint > 0 and ((time.time()-cptime)//60) // opt.checkpoint >= 1:
-              #     torch.save(model.state_dict(), 'weights/model_weights')
-              #     cptime = time.time()
+          if opt.checkpoint > 0 and ((time.time()-cptime)//60) // opt.checkpoint >= 1:
+              torch.save(model.state_dict(), 'weights/model_weights')
+              cptime = time.time()
    
    
         # print("%dm: epoch %d [%s%s]  %d%%  loss = %.3f\nepoch %d complete, loss = %.03f" %\
@@ -106,7 +85,6 @@ def main():
     parser.add_argument('-n_layers', type=int, default=6)
     parser.add_argument('-heads', type=int, default=8)
     parser.add_argument('-dropout', type=int, default=0.1)
-    parser.add_argument('-batchsize', type=int, default=1500)
     parser.add_argument('-printevery', type=int, default=1)
     parser.add_argument('-lr', type=int, default=0.0001)
     parser.add_argument('-load_weights')
@@ -114,22 +92,26 @@ def main():
     parser.add_argument('-max_strlen', type=int, default=80)
     parser.add_argument('-floyd', action='store_true')
     parser.add_argument('-checkpoint', type=int, default=0)
-    parser.add_argument('-batch_size', type=int, default=10)
-    parser.add_argument('-vid_feat_size', type=int, default=4096)
+    parser.add_argument('-batch_size', type=int, default=64)
+    parser.add_argument('-vid_feat_size', type=int, default=512)
     parser.add_argument('-save_freq', type=int, default=5)
-
+    # DataLoader
+    parser.add_argument('-num_train_set', type=int, default=1300)
+    parser.add_argument('-video_features_file', default='data/features_video_pca.npz')
+    parser.add_argument('-video_descriptions_file', default='data/video_descriptions_10_sentence.pickle')
+    parser.add_argument('-vocab_file', default='data/vocab_10_sentence.pickle')
+    parser.add_argument('-video_descriptions_csv', default='data/video_description.csv')
+    
     opt = parser.parse_args()
 
-    opt.device = 0 if opt.no_cuda is False else -1
-    if opt.device == 0:
-        assert torch.cuda.is_available()
+    opt.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     
     # read data and create model
     # read_data(opt)
     # SRC, TRG = create_fields(opt)
     # opt.train = create_dataset(opt, SRC, TRG)
     # model = get_model(opt, len(SRC.vocab), len(TRG.vocab))
-    opt.trainX, opt.trainY, opt.group_keys = load_data()
+#     opt.trainX, opt.trainY, opt.group_keys = load_data()
     model = get_model(opt, opt.vid_feat_size, 8)
 
     opt.optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr, betas=(0.9, 0.98), eps=1e-9)
