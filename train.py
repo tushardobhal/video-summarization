@@ -36,10 +36,10 @@ def train_model(model, opt):
 #           src = x.transpose(0,1) # (seq_len, batch, dim)?
 #           trg = y.transpose(0,1)
 #           trg = torch.tensor(opt.trainY[group][start_id: start_id + this_batch]).long().cuda()
-          # print(src.shape)
-          # print(trg.shape)
+          
           trg_input = trg[:, :-1] # not include the end of sentence
           src_mask, trg_mask = create_masks(src, trg_input, opt)
+            
           preds = model(src, trg_input, src_mask, trg_mask)
           ys = trg[:, 1:].contiguous().view(-1)
           opt.optimizer.zero_grad()

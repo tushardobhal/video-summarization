@@ -1,6 +1,5 @@
 .ipynb_checkpoints/
 *.npz
-Vocabulary.py
 __pycache__/
 data/
 model

@@ -5,30 +5,28 @@ from torch.autograd import Variable
 import pdb
 
 def nopeak_mask(size, opt):
-    np_mask = np.triu(np.ones((1, size, size)),
-    k=1).astype('uint8')
+    np_mask = np.triu(np.ones((1, size, size)), k=1).astype('uint8')
     np_mask =  Variable(torch.from_numpy(np_mask) == 0)
-    if opt.device == 0:
-      np_mask = np_mask.cuda()
+    np_mask = np_mask.to(opt.device)
     return np_mask
 
 def create_masks(src, trg, opt):
     # src = (N,seq_len)
     # src_mask = (src != opt.src_pad).unsqueeze(-2)
     #src_mask = (src != torch.max(src) + 1)
-    src_mask = torch.ones(src.shape[:-1], dtype = torch.uint8).unsqueeze(-2).cuda()
-    # print("final source mask", src_mask.shape)
+    src_mask = torch.ones(src.shape[:-1], dtype = torch.uint8).unsqueeze(-2).to(opt.device)
+    print("src mask", src_mask.shape)
 
     if trg is not None:
         # trg = (N, seq_len, 1)?
         # trg_mask = (trg != opt.trg_pad).unsqueeze(-2)
-        trg_mask = torch.ones(trg.shape, dtype = torch.uint8).unsqueeze(-2).cuda()
+        trg_mask = torch.ones(trg.shape[:-1], dtype = torch.uint8).unsqueeze(-2).to(opt.device)
         size = trg.size(1) # get seq_len for matrix
         np_mask = nopeak_mask(size, opt)
         if trg.is_cuda:
             np_mask.cuda()
-#         print(np_mask.shape)
-#         print(trg_mask.shape)
+        print("np mask", np_mask.shape)
+        print("trg mask", trg_mask.shape)
 #         pdb.set_trace()
         trg_mask = trg_mask & np_mask
         # print("final target mask", trg_mask.shape)

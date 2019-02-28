@@ -14,13 +14,13 @@ class Encoder(nn.Module):
         self.N = N
 
         # self.embed = Embedder(vocab_size, d_model)
-        self.embed = nn.Linear(vocab_size, d_model)
+        # self.embed = nn.Linear(vocab_size, d_model)
 
         self.pe = PositionalEncoder(d_model, dropout=dropout)
         self.layers = get_clones(EncoderLayer(d_model, heads, dropout), N)
         self.norm = Norm(d_model)
     def forward(self, src, mask):
-        x = self.embed(src)
+        x = src
         x = self.pe(x)
         for i in range(self.N):
             x = self.layers[i](x, mask)
