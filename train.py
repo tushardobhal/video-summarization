@@ -17,7 +17,7 @@ import torch.nn as nn
 from DataLoader import DataLoader
 from Vocabulary import Vocabulary
 
-#torch.set_default_tensor_type('torch.cuda.FloatTensor')
+torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
 def train_model(model, opt):
     print("training model...")
@@ -29,39 +29,23 @@ def train_model(model, opt):
     
     for epoch in range(opt.epochs):
         if epoch % opt.save_freq == 0:
-          torch.save(model.state_dict(), 'model')
+          torch.save(model.state_dict(), 'model.pth')
 
         total_loss = 0
         for i, (src, trg) in enumerate(trainloader.batch_data_generator()):
           trg_input = trg[:, :-1] # not include the end of sentence
           src_mask, trg_mask = create_masks(src, trg_input, opt)
-          print("SRC ", src_mask.size(), " TARGET ", trg_mask.size())  
           preds = model(src, trg_input, src_mask, trg_mask)
           ys = trg[:, 1:].contiguous().view(-1)
           opt.optimizer.zero_grad()
-          loss = F.cross_entropy(preds.view(-1, preds.size(-1)), ys.long())#, ignore_index=opt.trg_pad)
+          loss = F.cross_entropy(preds.view(-1, preds.size(-1)), ys.long())
           loss.backward()
           opt.optimizer.step()
           if opt.SGDR == True: 
               opt.sched.step()
 
-          total_loss += loss.item()
-
-          opt.train_len =  1
-          if (i + 1) % opt.printevery == 0:
-               p = int(100 * (i + 1) / opt.train_len)
-               avg_loss = total_loss/opt.printevery
-               if opt.floyd is False:
-                  print("   %dm: epoch %d [%s%s]  %d%%  loss = %.3f" %\
-                  ((time.time() - start)//60, epoch + 1, "".join('#'*(p//5)), "".join(' '*(20-(p//5))), p, avg_loss), end='\r')
-               else:
-                  print("   %dm: epoch %d [%s%s]  %d%%  loss = %.3f" %\
-                  ((time.time() - start)//60, epoch + 1, "".join('#'*(p//5)), "".join(' '*(20-(p//5))), p, avg_loss))
-               total_loss = 0
-
-          if opt.checkpoint > 0 and ((time.time()-cptime)//60) // opt.checkpoint >= 1:
-              torch.save(model.state_dict(), 'weights/model_weights')
-              cptime = time.time()
+          if i % opt.printevery == 0:
+              print("Epoch [{}]/[{}], Batch [{}]/[{}], Loss = {}".format(epoch, opt.epochs, i, opt.num_train_set // opt.batch_size, loss.item()))
 
 def main():
 
@@ -74,17 +58,17 @@ def main():
     parser.add_argument('-SGDR', action='store_true')
     parser.add_argument('-epochs', type=int, default=100)
     parser.add_argument('-d_model', type=int, default=512)
-    parser.add_argument('-n_layers', type=int, default=6)
+    parser.add_argument('-n_layers', type=int, default=12)
     parser.add_argument('-heads', type=int, default=8)
-    parser.add_argument('-dropout', type=int, default=0.1)
-    parser.add_argument('-printevery', type=int, default=1)
+    parser.add_argument('-dropout', type=int, default=0.2)
+    parser.add_argument('-printevery', type=int, default=10)
     parser.add_argument('-lr', type=int, default=0.0001)
     parser.add_argument('-load_weights')
     parser.add_argument('-create_valset', action='store_true')
     parser.add_argument('-max_strlen', type=int, default=80)
     parser.add_argument('-floyd', action='store_true')
     parser.add_argument('-checkpoint', type=int, default=0)
-    parser.add_argument('-batch_size', type=int, default=4)
+    parser.add_argument('-batch_size', type=int, default=128)
     parser.add_argument('-vid_feat_size', type=int, default=512)
     parser.add_argument('-save_freq', type=int, default=5)
     # DataLoader
@@ -93,21 +77,17 @@ def main():
     parser.add_argument('-video_descriptions_file', default='data/video_descriptions_10_sentence.pickle')
     parser.add_argument('-vocab_file', default='data/vocab_10_sentence.pickle')
     parser.add_argument('-video_descriptions_csv', default='data/video_description.csv')
-    
+    parser.add_argument('-target_feature_size', default=5883)
+ 
     opt = parser.parse_args()
 
-    #opt.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    opt.device = 'cpu'
+    opt.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     
     # read data and create model
     # read_data(opt)
-    # SRC, TRG = create_fields(opt)
-    # opt.train = create_dataset(opt, SRC, TRG)
-    # model = get_model(opt, len(SRC.vocab), len(TRG.vocab))
-#     opt.trainX, opt.trainY, opt.group_keys = load_data()
-    model = get_model(opt, opt.vid_feat_size, 8)
+    model = get_model(opt, opt.vid_feat_size, opt.target_feature_size)
 
-    #model = nn.DataParallel(model)
+    model = nn.DataParallel(model)
 
     #cmd = os.popen('nvidia-smi')
     #gpu = cmd.read()
@@ -121,60 +101,8 @@ def main():
     if opt.checkpoint > 0:
         print("model weights will be saved every %d minutes and at end of epoch to directory weights/"%(opt.checkpoint))
     
-    # if opt.load_weights is not None and opt.floyd is not None:
-    #     os.mkdir('weights')
-    #     pickle.dump(SRC, open('weights/SRC.pkl', 'wb'))
-    #     pickle.dump(TRG, open('weights/TRG.pkl', 'wb'))
-    
     train_model(model, opt)
 
-    # if opt.floyd is False:
-    #     promptNextAction(model, opt, SRC, TRG)
-
-# load 2 video pieces with same lengths
-# load text descriptions
-def load_data():
-    ''' 
-    X (video features) is built dynamically.
-    This function requires features_video.npz, raw_text.pkl, Y.pkl
-    '''
-    print("loading data ...")
-    fs = np.load("features_video.npz")
-    print(len(fs.files))
-    with open('raw_text.pkl', 'rb') as f:
-        raw_text = pickle.load(f)
-    print(len(raw_text))
-
-    X = dict()
-    not_in_count = 0
-    for i, row in tqdm(enumerate(raw_text)):
-      try:
-        feat = fs[row[0] + "_" + row[1] + "_" + row[2]]
-      except: # text description has no corresponding video feature
-        not_in_count += 1
-        continue
-
-      feat_len = feat.shape[0]
-      if feat_len not in X.keys():
-          X[feat_len] = []
-      X[feat_len].append(feat)
-
-    for key in X.keys():
-      X[key] = np.array(X[key])
-    #   np.save("X_" + str(key), X[key])
-
-    for fname in os.listdir("."):
-      if fname[:2] == "X_" and fname[-3:] == "npy":
-        X[int(fname[2:-4])] = np.load(fname)
-
-    #print(X.keys())
-    with open('Y.pkl', 'rb') as f:
-      Y = pickle.load(f)
-
-    group_keys = np.array([*X])
-
-    print("data loaded.")
-    return X, Y, group_keys
 
 def yesno(response):
     while True:
