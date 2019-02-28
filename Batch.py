@@ -23,7 +23,7 @@ def create_masks(src, trg, opt):
         # trg = (N, seq_len, 1)?
         # trg_mask = (trg != opt.trg_pad).unsqueeze(-2)
         trg_mask = torch.ones(trg.shape, dtype = torch.uint8).unsqueeze(-2).cuda()
-        size = trg.size(0) # get seq_len for matrix
+        size = trg.size(1) # get seq_len for matrix
         np_mask = nopeak_mask(size, opt)
         if trg.is_cuda:
             np_mask.cuda()

@@ -23,7 +23,7 @@ class DataLoader:
         
         # max sentences to include in the dataset. '0' to include all sentences
         self.max_sentence_num = 10
-        self.max_words_num = 25
+        self.max_words_num = 27
         
         self.num_train_set = opt.num_train_set
         
@@ -111,15 +111,16 @@ class DataLoader:
         descriptions = self.video_descriptions[video_id]
         index = np.random.randint(low=len(descriptions))
         
-        target = torch.zeros(self.max_words_num, len(self.vocab), dtype=torch.float32)
-        i = 0
+        target = torch.zeros(self.max_words_num, len(self.vocab))
+        target[0, self.vocab.word2idx["<start>"]] = 1
+        k = 1
         for word in descriptions[index].split(' '):    
             filtered_word = word.lower().split('.')[0]
-            target[i, self.vocab.word2idx[filtered_word]] = 1
-            ++i
-            if i == self.max_words_num:
+            target[k, self.vocab.word2idx[filtered_word]] = 1
+            k = k + 1
+            if k == self.max_words_num-1:
                 break
-            
+        target[k, self.vocab.word2idx["<end>"]] = 1    
         return target
     
     def data_generator(self):

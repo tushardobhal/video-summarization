@@ -32,9 +32,9 @@ def train_model(model, opt):
           torch.save(model.state_dict(), 'model')
 
         total_loss = 0
-        for i, (x, y) in enumerate(trainloader.batch_data_generator()):
-          src = x.transpose(0,1) # (seq_len, batch, dim)?
-          trg = y.transpose(0,1)
+        for i, (src, trg) in enumerate(trainloader.batch_data_generator()):
+#           src = x.transpose(0,1) # (seq_len, batch, dim)?
+#           trg = y.transpose(0,1)
 #           trg = torch.tensor(opt.trainY[group][start_id: start_id + this_batch]).long().cuda()
           # print(src.shape)
           # print(trg.shape)
