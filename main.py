@@ -19,15 +19,7 @@ from Vocabulary import Vocabulary
 
 torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
-def train_model(model, opt):
-    print("Training model for num_epochs - {}, vocab_size - {}...".format(opt.epochs, opt.target_feature_size))
-    opt.optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr, betas=(0.9, 0.98), eps=1e-9)
-    if opt.SGDR == True:
-        opt.sched = CosineWithRestarts(opt.optimizer, T_max=opt.train_len)
-        
-    model.train()
-    trainloader = DataLoader(opt=opt, train=True)
-    
+def train_model(model, trainloader, evalloader, opt):
     for epoch in range(opt.epochs):
         total_loss = 0
         for i, (src, trg) in enumerate(trainloader.batch_data_generator()):
@@ -43,18 +35,13 @@ def train_model(model, opt):
                 opt.sched.step()
             total_loss += loss.item()
 
-        print("Epoch [{}]/[{}], Loss = {}".format(epoch, opt.epochs, total_loss))
+        print("Epoch: [{}]/[{}], Loss: {}".format(epoch, opt.epochs, total_loss))
         if epoch % opt.save_freq == 0:
+            eval_model(model, evalloader, opt)
             torch.save(model.state_dict(), "{}/model_{}.pth".format(opt.model_save_dir, epoch))
 			
 
-def eval_model(model, opt):
-    print("Evaluating model...")
-    model.load_state_dict(torch.load(opt.model_save_dir + '/model_595.pth'))
-    model.eval()
-    print("Transformer model loaded")
-    evalloader = DataLoader(opt=opt, train=False)
-
+def eval_model(model, evalloader, opt):
     total_loss = 0
     for i, (src, trg) in enumerate(evalloader.batch_data_generator()):
         with torch.no_grad():
@@ -64,14 +51,14 @@ def eval_model(model, opt):
             ys = trg[:, 1:].contiguous().view(-1)
             loss = F.cross_entropy(preds.view(-1, preds.size(-1)), ys.long())
             total_loss += loss.item()
-            print("Loss - {}, Preds size - {}".format(total_loss, preds.size()))
-
-            batch, seq, word = preds.size()
-            for j in range(batch):
-                sentence = ' '.join(evalloader.get_sentence_from_tensor(preds[j]))
+            
+            # Uncomment to print the sentences
+            # batch, seq, word = preds.size()
+            # for j in range(batch):
+                # sentence = ' '.join(evalloader.get_sentence_from_tensor(preds[j]))
                 # print(sentence)
 
-    print("Total Validation loss is - {}".formattotal_loss()) 
+    print("Total Validation loss: {}".format(total_loss)) 
 		  
 
 def main():
@@ -114,9 +101,21 @@ def main():
     model = nn.DataParallel(model)
 
     if opt.mode == 'train':
-        train_model(model, opt)
+        print("Training model for num_epochs - {}, vocab_size - {}...".format(opt.epochs, opt.target_feature_size))
+        opt.optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr, betas=(0.9, 0.98), eps=1e-9)
+        if opt.SGDR == True:
+            opt.sched = CosineWithRestarts(opt.optimizer, T_max=opt.train_len)
+        model.train()
+        trainloader = DataLoader(opt=opt, train=True)
+        evalloader = DataLoader(opt=opt, train=False)
+        train_model(model, trainloader, evalloader, opt)
     elif opt.mode == 'eval':
-        eval_model(model, opt)
+        print("Evaluating model...")
+        model.load_state_dict(torch.load(opt.model_save_dir + '/model_595.pth'))
+        model.eval()
+        print("Transformer model loaded")
+        evalloader = DataLoader(opt=opt, train=False)
+        eval_model(model, evalloader, opt)
     else:
         print("Wrong option. Give either 'train' or 'eval' as input to -mode")
 
