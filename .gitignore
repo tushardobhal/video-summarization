@@ -1,7 +1,7 @@
 .ipynb_checkpoints/
 *.npz
+*.ipynb
 __pycache__/
 data/
-model.pth
-model/
-model
+model*
+*log*

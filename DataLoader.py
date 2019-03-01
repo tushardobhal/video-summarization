@@ -89,12 +89,13 @@ class DataLoader:
                     
         return vocab 
     
-    def get_words_from_index(self, tensor):
+    def get_sentence_from_tensor(self, tensor):
         words_list = []
-        for idx in tensor.data.cpu().numpy():
-            words_list.append(self.vocab.idx2word[idx])
+        np_array = tensor.data.cpu().numpy()
+        for i in range(np_array.shape[0]):
+            words_list.append(self.vocab.idx2word[np.argmax(np_array[i])])
         return words_list
-    
+ 
     def get_one_hot_encoded_all(self, video_id):
         target = []
             
