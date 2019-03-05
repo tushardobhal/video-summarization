@@ -14,7 +14,7 @@ from tqdm import tqdm
 import pickle as pickle
 import torch.nn as nn
 
-from DataLoader import DataLoader
+from activitynet import DataLoader
 from Vocabulary import Vocabulary
 
 torch.set_default_tensor_type('torch.cuda.FloatTensor')
@@ -29,6 +29,8 @@ def train_model(model, trainloader, evalloader, opt):
             ys = trg[:, 1:].contiguous().view(-1)
             opt.optimizer.zero_grad()
             loss = F.cross_entropy(preds.view(-1, preds.size(-1)), ys.long())
+            if i % opt.log_frequency == 0:
+                print("Epoch [{}][{}] Batch [{}] Loss = {}".format(epoch, opt.epochs, i, loss.item()))
             loss.backward()
             opt.optimizer.step()
             if opt.SGDR == True: 
@@ -36,9 +38,9 @@ def train_model(model, trainloader, evalloader, opt):
             total_loss += loss.item()
 
         print("Epoch: [{}]/[{}], Loss: {}".format(epoch, opt.epochs, total_loss))
-        if epoch % opt.save_freq == 0:
+        if epoch % opt.save_freq == opt.save_freq - 1:
+            torch.save(model.state_dict(), "{}/activitynetmodel_{}.pth".format(opt.model_save_dir, epoch))
             eval_model(model, evalloader, opt)
-            torch.save(model.state_dict(), "{}/model_{}.pth".format(opt.model_save_dir, epoch))
 			
 
 def eval_model(model, evalloader, opt):
@@ -53,24 +55,25 @@ def eval_model(model, evalloader, opt):
             total_loss += loss.item()
             
             # Uncomment to print the sentences
-            # batch, seq, word = preds.size()
-            # for j in range(batch):
-                # sentence = ' '.join(evalloader.get_sentence_from_tensor(preds[j]))
-                # print(sentence)
+            batch, seq, word = preds.size()
+            sentences = []
+            for j in range(batch):
+                sentence = ' '.join(evalloader.get_sentence_from_tensor(preds[j]))
+                sentences.append(sentence)
+            print(sentences[0])
 
     print("Total Validation loss: {}".format(total_loss)) 
 		  
 
 def main():
-
     parser = argparse.ArgumentParser()
-    parser.add_argument('-mode', required=True)
+    parser.add_argument('-mode', default='train')
     parser.add_argument('-no_cuda', action='store_true')
     parser.add_argument('-SGDR', action='store_true')
     parser.add_argument('-epochs', type=int, default=2000)
-    parser.add_argument('-d_model', type=int, default=512)
+    parser.add_argument('-d_model', type=int, default=500)
     parser.add_argument('-n_layers', type=int, default=6)
-    parser.add_argument('-heads', type=int, default=8)
+    parser.add_argument('-heads', type=int, default=10)
     parser.add_argument('-dropout', type=int, default=0.2)
     parser.add_argument('-printevery', type=int, default=10)
     parser.add_argument('-lr', type=int, default=0.0001)
@@ -79,17 +82,16 @@ def main():
     parser.add_argument('-max_strlen', type=int, default=80)
     parser.add_argument('-floyd', action='store_true')
     parser.add_argument('-checkpoint', type=int, default=0)
-    parser.add_argument('-batch_size', type=int, default=128)
-    parser.add_argument('-vid_feat_size', type=int, default=512)
-    parser.add_argument('-save_freq', type=int, default=20)
+    parser.add_argument('-batch_size', type=int, default=32)
+    parser.add_argument('-vid_feat_size', type=int, default=500)
+    parser.add_argument('-save_freq', type=int, default=2)
     parser.add_argument('-model_save_dir', default='model')
+    parser.add_argument('-log_frequency', default=20)
     # DataLoader
-    parser.add_argument('-num_train_set', type=int, default=1300)
-    parser.add_argument('-video_features_file', default='data/features_video_pca.npz')
-    # parser.add_argument('-video_descriptions_file', default='data/video_descriptions_10_sentence.pickle')
-    parser.add_argument('-video_descriptions_file', default='data/video_descriptions.pickle')
-    # parser.add_argument('-vocab_file', default='data/vocab_10_sentence.pickle')
-    parser.add_argument('-vocab_file', default='data/vocab.pickle')
+    parser.add_argument('-num_train_set', type=int, default=8000)
+    parser.add_argument('-video_features_file', default='activitynet/anet_v1.3.c3d.hdf5')
+    parser.add_argument('-video_descriptions_file', default='activitynet_descriptions.pkl')
+    parser.add_argument('-vocab_file', default='activitynet_vocab.pkl')
     parser.add_argument('-video_descriptions_csv', default='data/video_description.csv')
     parser.add_argument('-target_feature_size', type=int, default=14238)
  
@@ -104,7 +106,7 @@ def main():
         print("Training model for num_epochs - {}, vocab_size - {}...".format(opt.epochs, opt.target_feature_size))
         opt.optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr, betas=(0.9, 0.98), eps=1e-9)
         if opt.SGDR == True:
-            opt.sched = CosineWithRestarts(opt.optimizer, T_max=opt.train_len)
+            opt.sched = CosineWithRestarts(opt.optimizer, T_max = 10)
         model.train()
         trainloader = DataLoader(opt=opt, train=True)
         evalloader = DataLoader(opt=opt, train=False)
