@@ -12,8 +12,9 @@ class Embedder(nn.Module):
         return self.embed(x)
 
 class PositionalEncoder(nn.Module):
-    def __init__(self, d_model, max_seq_len = 200, dropout = 0.1):
+    def __init__(self, d_model, device, max_seq_len = 200, dropout = 0.1):
         super().__init__()
+        self.device = device
         self.d_model = d_model
         self.dropout = nn.Dropout(dropout)
         # create constant 'pe' matrix with values dependant on 
@@ -36,6 +37,6 @@ class PositionalEncoder(nn.Module):
         seq_len = x.size(1)
         pe = Variable(self.pe[:,:seq_len], requires_grad=False)
         if x.is_cuda:
-            pe.cuda()
+            pe.to(self.device)
         x = x + pe
         return self.dropout(x)
