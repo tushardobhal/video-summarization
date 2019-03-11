@@ -144,26 +144,6 @@ class DataLoader:
             target[i + 1] = self.vocab.word2idx[filtered_word]
 
         return torch.tensor(target, dtype = torch.long)
-    
-    # def data_generator(self):
-        
-    #     while True:
-    #         indexes = np.random.choice(a=np.arange(len(self.names)), size=self.batch_size)
-    #         max_num_rows = 0
-    #         for i in range(len(indexes)):
-    #             features = self.video_features[self.names[indexes[i]]]
-    #             if features.shape[0] > max_num_rows:
-    #                 max_num_rows = features.shape[0]
-            
-    #         x = torch.zeros(self.batch_size, max_num_rows, 512)
-    #         y = []
-    #         for i in range(len(indexes)):
-    #             video_id = self.names[indexes[i]]
-    #             features = self.video_features[video_id]
-    #             x[i,:features.shape[0],:] = torch.from_numpy(features)
-    #             y.append(self.get_one_hot_encoded(video_id))
-                
-    #         yield x.to(device), torch.stack(y).to(device)
             
     def batch_data_generator(self):
         

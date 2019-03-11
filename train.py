@@ -2,11 +2,9 @@ import argparse
 import time
 import torch
 from Models import get_model
-#from Process import *
 import torch.nn.functional as F
 from Optim import CosineWithRestarts
 from Batch import create_masks
-# import dill as pickle
 import os
 import csv
 import nltk
@@ -32,42 +30,19 @@ def train_model(model, opt, trainloader):
 
         total_loss = 0
         for i, (src, trg, vid_names) in enumerate(trainloader.batch_data_generator()):
-#           src = x.transpose(0,1) # (seq_len, batch, dim)?
-#           trg = y.transpose(0,1)
-#           trg = torch.tensor(opt.trainY[group][start_id: start_id + this_batch]).long().cuda()
-                    
-          # pdb.set_trace()
           trg_input = trg[:, :-1] # not include the end of sentence
           src_mask, trg_mask = create_masks(src, trg_input, opt)
-          # pdb.set_trace()
 
           preds = model(src, trg_input, src_mask, trg_mask)
           ys = trg[:, 1:].contiguous().view(-1)
           opt.optimizer.zero_grad()
-          loss = F.cross_entropy(preds.view(-1, preds.size(-1)), ys)#, ignore_index=opt.trg_pad)
+          loss = F.cross_entropy(preds.view(-1, preds.size(-1)), ys)
           loss.backward()
           opt.optimizer.step()
           if opt.SGDR == True: 
               opt.sched.step()
 
           total_loss += loss.item()
-
-          # pdb.set_trace()
-          # opt.train_len =  1
-          # if (i + 1) % opt.printevery == 0:
-          #      p = int(100 * (i + 1) / opt.train_len)
-          #      avg_loss = total_loss/opt.printevery
-          #      if opt.floyd is False:
-          #         print("   %dm: epoch %d [%s%s]  %d%%  loss = %.3f" %\
-          #         ((time.time() - start)//60, epoch + 1, "".join('#'*(p//5)), "".join(' '*(20-(p//5))), p, avg_loss), end='\r')
-          #      else:
-          #         print("   %dm: epoch %d [%s%s]  %d%%  loss = %.3f" %\
-          #         ((time.time() - start)//60, epoch + 1, "".join('#'*(p//5)), "".join(' '*(20-(p//5))), p, avg_loss))
-          #      total_loss = 0
-
-          # if opt.checkpoint > 0 and ((time.time()-cptime)//60) // opt.checkpoint >= 1:
-          #     torch.save(model.state_dict(), 'weights/model_weights')
-          #     cptime = time.time()
 
         avg_loss = total_loss / (i + 1)
         epoch_time = (time.time() - start)
@@ -102,15 +77,15 @@ def main():
     parser.add_argument('-max_strlen', type=int, default=80)
     parser.add_argument('-floyd', action='store_true')
     parser.add_argument('-checkpoint', type=int, default=0)
-    parser.add_argument('-batch_size', type=int, default=200)
+    parser.add_argument('-batch_size', type=int, default=64)
     parser.add_argument('-vid_feat_size', type=int, default=512)
     parser.add_argument('-save_freq', type=int, default=5)
     # DataLoader
     parser.add_argument('-num_train_set', type=int, default=1300)
-    parser.add_argument('-video_features_file', default='data/features_video_pca.npz')
-    parser.add_argument('-video_descriptions_file', default='data/video_descriptions_10_sentence.pickle')
-    parser.add_argument('-vocab_file', default='data/vocab_10_sentence.pickle')
-    parser.add_argument('-video_descriptions_csv', default='data/video_description.csv')
+    parser.add_argument('-video_features_file', default='../data/features_video_rgb_pca_i3d.npz')
+    parser.add_argument('-video_descriptions_file', default='../data/video_descriptions_10_sentence.pickle')
+    parser.add_argument('-vocab_file', default='../data/vocab_10_sentence.pickle')
+    parser.add_argument('-video_descriptions_csv', default='../data/video_description.csv')
     parser.add_argument('-gpu_id', type=int, default=0)
     
     opt = parser.parse_args()
@@ -225,10 +200,10 @@ def promptNextAction(model, opt, SRC, TRG):
                     break
             
             print("saving weights to " + dst + "/...")
-            torch.save(model.state_dict(), f'{dst}/model_weights')
+            torch.save(model.state_dict(), '{dst}/model_weights')
             if saved_once == 0:
-                pickle.dump(SRC, open(f'{dst}/SRC.pkl', 'wb'))
-                pickle.dump(TRG, open(f'{dst}/TRG.pkl', 'wb'))
+                pickle.dump(SRC, open('{dst}/SRC.pkl', 'wb'))
+                pickle.dump(TRG, open('{dst}/TRG.pkl', 'wb'))
                 saved_once = 1
             
             print("weights and field pickles saved to " + dst)
