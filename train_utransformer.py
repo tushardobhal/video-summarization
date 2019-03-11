@@ -1,7 +1,7 @@
 import argparse
 import time
 import torch
-from Models import get_model
+from utransformer import UTransformer
 import torch.nn.functional as F
 from Optim import CosineWithRestarts
 from Batch import create_masks
@@ -31,9 +31,8 @@ def train_model(model, opt, trainloader):
         total_loss = 0
         for i, (src, trg, vid_names) in enumerate(trainloader.batch_data_generator()):
           trg_input = trg[:, :-1] # not include the end of sentence
-          src_mask, trg_mask = create_masks(src, trg_input, opt)
 
-          preds = model(src, trg_input, src_mask, trg_mask)
+          preds = model(src, trg_input)
           ys = trg[:, 1:].contiguous().view(-1)
           opt.optimizer.zero_grad()
           loss = F.cross_entropy(preds.view(-1, preds.size(-1)), ys)
@@ -92,15 +91,8 @@ def main():
 
     opt.device = torch.device('cuda:' + str(opt.gpu_id))# if torch.cuda.is_available() else 'cpu')
     
-    # read data and create model
-    # read_data(opt)
-    # SRC, TRG = create_fields(opt)
-    # opt.train = create_dataset(opt, SRC, TRG)
-    # model = get_model(opt, len(SRC.vocab), len(TRG.vocab))
-#     opt.trainX, opt.trainY, opt.group_keys = load_data()
     trainloader = DataLoader(opt=opt, train=True)
-    model = get_model(opt, opt.vid_feat_size, trainloader.vocab.idx)
-
+    model = UTransformer(num_vocab = trainloader.vocab.idx, embedding_size = opt.vid_feat_size, hidden_size = opt.d_model, num_layers = opt.n_layers, num_heads = opt.heads, total_key_depth = opt.d_model, total_value_depth = opt.d_model, filter_size = 2048).to(opt.device)
     opt.optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr, betas=(0.9, 0.98), eps=1e-9)
     if opt.SGDR == True:
         opt.sched = CosineWithRestarts(opt.optimizer, T_max=opt.train_len)
@@ -108,18 +100,8 @@ def main():
     if opt.checkpoint > 0:
         print("model weights will be saved every %d minutes and at end of epoch to directory weights/"%(opt.checkpoint))
     
-    # if opt.load_weights is not None and opt.floyd is not None:
-    #     os.mkdir('weights')
-    #     pickle.dump(SRC, open('weights/SRC.pkl', 'wb'))
-    #     pickle.dump(TRG, open('weights/TRG.pkl', 'wb'))
-    
     train_model(model, opt, trainloader)
 
-    # if opt.floyd is False:
-    #     promptNextAction(model, opt, SRC, TRG)
-
-# load 2 video pieces with same lengths
-# load text descriptions
 def load_data():
     ''' 
     X (video features) is built dynamically.
