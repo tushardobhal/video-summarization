@@ -8,7 +8,8 @@ import torch.nn.functional as F
 from Optim import CosineWithRestarts
 from Batch import create_masks
 import pdb
-import dill as pickle
+#import dill as pickle
+import pickle
 import argparse
 from Models import get_model
 from Beam import modified_beam
@@ -82,11 +83,11 @@ def main():
 
     # DataLoader
     parser.add_argument('-num_train_set', type=int, default=1300)
-    parser.add_argument('-video_features_file', default='data/features_video_pca.npz')
-    parser.add_argument('-video_descriptions_file', default='data/video_descriptions_10_sentence.pickle')
-    parser.add_argument('-vocab_file', default='data/vocab_10_sentence.pickle')
-    parser.add_argument('-video_descriptions_csv', default='data/video_description.csv')
-    parser.add_argument('-batch_size', type=int, default=150)
+    parser.add_argument('-video_features_file', default='../data/features_video_rgb_pca_i3d.npz')
+    parser.add_argument('-video_descriptions_file', default='../data/video_descriptions.pickle')
+    parser.add_argument('-vocab_file', default='../data/vocab.pickle')
+    parser.add_argument('-video_descriptions_csv', default='../data/video_description.csv')
+    parser.add_argument('-batch_size', type=int, default=64)
     parser.add_argument('-vid_feat_size', type=int, default=512)
 
     opt = parser.parse_args()

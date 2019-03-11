@@ -2,6 +2,7 @@ import argparse
 import time
 import torch
 from utransformer import UTransformer
+import torch.nn as nn
 import torch.nn.functional as F
 from Optim import CosineWithRestarts
 from Batch import create_masks
@@ -47,7 +48,7 @@ def train_model(model, opt, trainloader):
         epoch_time = (time.time() - start)
         print("%dm %ds: loss = %.3f\n" %(epoch_time//60, epoch_time%60, avg_loss))
 
-        if opt.checkpoint > 0 and ((time.time()-cptime)//60) // opt.checkpoint >= 1:
+        if epoch % opt.save_freq == 0:
           torch.save(model.state_dict(), 'weights/model_weights')
           cptime = time.time()
           print("model saved at epoch ", epoch)
@@ -65,7 +66,7 @@ def main():
     parser.add_argument('-no_cuda', action='store_true')
     parser.add_argument('-SGDR', action='store_true')
     parser.add_argument('-epochs', type=int, default=100)
-    parser.add_argument('-d_model', type=int, default=512)
+    parser.add_argument('-d_model', type=int, default=1024)
     parser.add_argument('-n_layers', type=int, default=6)
     parser.add_argument('-heads', type=int, default=8)
     parser.add_argument('-dropout', type=int, default=0.1)
@@ -77,22 +78,29 @@ def main():
     parser.add_argument('-floyd', action='store_true')
     parser.add_argument('-checkpoint', type=int, default=0)
     parser.add_argument('-batch_size', type=int, default=64)
-    parser.add_argument('-vid_feat_size', type=int, default=512)
+    parser.add_argument('-vid_feat_size', type=int, default=1024)
     parser.add_argument('-save_freq', type=int, default=5)
     # DataLoader
     parser.add_argument('-num_train_set', type=int, default=1300)
-    parser.add_argument('-video_features_file', default='../data/features_video_rgb_pca_i3d.npz')
+    parser.add_argument('-video_features_file', default='../data/features_video_rgb_i3d.npz')
     parser.add_argument('-video_descriptions_file', default='../data/video_descriptions.pickle')
     parser.add_argument('-vocab_file', default='../data/vocab.pickle')
     parser.add_argument('-video_descriptions_csv', default='../data/video_description.csv')
     parser.add_argument('-gpu_id', type=int, default=0)
-    
+
     opt = parser.parse_args()
 
     opt.device = torch.device('cuda:' + str(opt.gpu_id))# if torch.cuda.is_available() else 'cpu')
-    
+
+    # Create Data Loader
     trainloader = DataLoader(opt=opt, train=True)
+
+    # Create Model
     model = UTransformer(num_vocab = trainloader.vocab.idx, embedding_size = opt.vid_feat_size, hidden_size = opt.d_model, num_layers = opt.n_layers, num_heads = opt.heads, total_key_depth = opt.d_model, total_value_depth = opt.d_model, filter_size = 2048).to(opt.device)
+
+    # Use DataParallel
+    model = nn.DataParallel(model)
+
     opt.optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr, betas=(0.9, 0.98), eps=1e-9)
     if opt.SGDR == True:
         opt.sched = CosineWithRestarts(opt.optimizer, T_max=opt.train_len)
