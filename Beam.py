@@ -14,8 +14,8 @@ def modified_beam(model, src, trg, opt):
         trg_mask = nopeak_mask(i, opt)
 
         # pdb.set_trace()
-        out = model.out(model.decoder(outputs[:,:i],
-        e_outputs, src_mask, trg_mask)).detach()
+        out = model.module.W(model.module.transformer_decoder(outputs[:,:i],
+        e_outputs)).detach()
 
         out = F.softmax(out, dim=-1).detach()
     
@@ -24,21 +24,6 @@ def modified_beam(model, src, trg, opt):
         else: # last iter: get the best sentence instead of k best
             outputs, log_scores = k_best_outputs(outputs, out, log_scores, i, 1, opt)
 
-        # if (outputs==eos_tok).nonzero().size(0) == opt.k:
-        #     alpha = 0.7
-        #     div = 1/((outputs==eos_tok).nonzero()[:,1].type_as(log_scores)**alpha)
-        #     _, ind = torch.max(log_scores * div, 1)
-        #     ind = ind.data[0]
-        #     break
-    
-    # if ind is None:
-    #     length = (outputs[0]==eos_tok).nonzero()[0]
-    #     return ' '.join([TRG.vocab.itos[tok] for tok in outputs[0][1:length]])
-    
-    # else:
-    #     length = (outputs[ind]==eos_tok).nonzero()[0]
-    #     return ' '.join([TRG.vocab.itos[tok] for tok in outputs[ind][1:length]])
-
     return outputs
 
 def init_vars(model, src, trg, opt):
@@ -46,7 +31,7 @@ def init_vars(model, src, trg, opt):
     init_tok = model.vocab('<start>')
     # src_mask = (src != SRC.vocab.stoi['<pad>']).unsqueeze(-2)
     src_mask = torch.ones(src.shape[:-1], dtype = torch.uint8).unsqueeze(-2).to(opt.device)
-    e_output = model.encoder(src, src_mask).detach()
+    e_output = model.module.transformer_encoder(src).detach()
     
     outputs = torch.LongTensor([[init_tok]] * opt.batch_size)
     outputs = outputs.to(opt.device)
@@ -56,8 +41,8 @@ def init_vars(model, src, trg, opt):
     # src_mask, trg_mask = create_masks(src, trg_input, opt)
 
     # pdb.set_trace()
-    out = model.out(model.decoder(outputs,
-        e_output, src_mask, trg_mask)).detach()
+    out = model.module.W(model.module.transformer_decoder(outputs,
+        e_output)).detach()
     out = F.softmax(out, dim=-1)
     
     # pdb.set_trace()
@@ -119,7 +104,7 @@ def beam_search(src, model, SRC, TRG, opt):
     
         trg_mask = nopeak_mask(i, opt)
 
-        out = model.out(model.decoder(outputs[:,:i],
+        out = model.module.out(model.module.transformer_decoder(outputs[:,:i],
         e_outputs, src_mask, trg_mask))
 
         out = F.softmax(out, dim=-1)

@@ -28,6 +28,7 @@ class DataLoader:
         self.video_features_file = opt.video_features_file
         self.batch_size = opt.batch_size
         
+        self.vid_feat_size = opt.vid_feat_size
         # max sentences to include in the dataset. '0' to include all sentences
         self.max_sentence_num = 10
         self.max_words_num = 27
@@ -96,6 +97,14 @@ class DataLoader:
                     vocab.add_word(filtered_word)
                     
         return vocab 
+
+    def get_sentence_from_tensor(self, tensor):
+        words_list = []
+        np_array = tensor.data.cpu().numpy()
+        for i in range(np_array.shape[0]):
+            words_list.append(self.vocab.idx2word[np.argmax(np_array[i])])
+        return words_list
+
     
     def get_words_from_index(self, tensor):
         words_list = []
@@ -159,7 +168,7 @@ class DataLoader:
                 if features.shape[0] > max_seq_len:
                     max_seq_len = features.shape[0]
             
-            x = torch.zeros(curr_batch_size, max_seq_len, 512)
+            x = torch.zeros(curr_batch_size, max_seq_len, self.vid_feat_size)
             y = []
             vid_names = []
             for i in range(len(indexes)):

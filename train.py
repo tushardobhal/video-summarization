@@ -48,7 +48,7 @@ def train_model(model, opt, trainloader):
         epoch_time = (time.time() - start)
         print("%dm %ds: loss = %.3f\n" %(epoch_time//60, epoch_time%60, avg_loss))
 
-        if opt.checkpoint > 0 and ((time.time()-cptime)//60) // opt.checkpoint >= 1:
+        if epoch % opt.save_freq == 0:
           torch.save(model.state_dict(), 'weights/model_weights')
           cptime = time.time()
           print("model saved at epoch ", epoch)

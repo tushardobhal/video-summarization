@@ -1,6 +1,7 @@
 import argparse
 import time
 import torch
+import torch.nn as nn
 from Models import get_model
 from tqdm import tqdm
 import torch.nn.functional as F
@@ -16,6 +17,7 @@ import re
 
 from DataLoader import DataLoader
 from Vocabulary import Vocabulary
+from utransformer import UTransformer
 
 from nltk.translate import bleu_score
 
@@ -87,10 +89,18 @@ def main():
     opt = parser.parse_args()
 
     opt.device = torch.device('cuda:0')# if torch.cuda.is_available() else 'cpu')
-    
+   
+    trainloader = DataLoader(opt=opt, train=True) 
     evalloader = DataLoader(opt=opt, train=False)
-    model = get_model(opt, opt.vid_feat_size, evalloader.vocab.idx)
-    model.vocab = evalloader.vocab
+    #model = get_model(opt, opt.vid_feat_size, evalloader.vocab.idx)
+
+    # Create Model
+    model = UTransformer(num_vocab = trainloader.vocab.idx, embedding_size = opt.vid_feat_size, hidden_size = opt.d_model, num_layers = opt.n_layers, num_heads = opt.heads, total_key_depth = opt.d_model, total_value_depth = opt.d_model, filter_size = 2048).to(opt.device)
+
+    model = nn.DataParallel(model)
+    model.load_state_dict(torch.load(opt.load_weights + '/ut_msvd'))
+
+    model.vocab = trainloader.vocab
     model.eval()
     
     bleu_1 = 0.0
@@ -100,12 +110,16 @@ def main():
     count_bleu = 0
     for i, (src, trg, vid_names) in enumerate(evalloader.batch_data_generator()):
         opt.batch_size = src.shape[0] # actual batch size might be smaller in last batch iter
+        #print("GT:- ", evalloader.get_words_from_index(trg[0]))
         sentences = modified_beam(model, src, trg, opt)
+        #print("GT:- ", trainloader.get_sentence_from_tensor(trg[0]))
+        #print("Pred:- ", evalloader.get_words_from_index(sentences[0]))
         for sent_id, sentence in enumerate(sentences):
             word_sent = evalloader.get_words_from_index(sentence)
             word_sent = " ".join(word_sent[1:word_sent.index("<end>")])
             ground_truth = [gt_sent.lower()[:-1] for gt_sent in evalloader.video_descriptions[vid_names[sent_id]]] # lower case, delete "." at the end
             
+            print("Sent:- ", word_sent)
             bleu_1 += bleu_score.sentence_bleu(ground_truth,word_sent, weights = (1,0,0,0))
             bleu_2 += bleu_score.sentence_bleu(ground_truth,word_sent, weights = (1/2,1/2,0,0))
             bleu_3 += bleu_score.sentence_bleu(ground_truth,word_sent, weights = (1/3,1/3,1/3,0))
